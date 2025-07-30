@@ -19,7 +19,7 @@ const PaymentTable = ({ payments }) => {
             <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
               <td className="py-4 px-6 whitespace-nowrap text-sm font-medium text-gray-900">{payment.id}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{payment.invoiceId}</td>
-              <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">${payment.amount.toFixed(2)}</td>
+              <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">₹{payment.amount.toFixed(2)}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{payment.date}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{payment.mode}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{payment.notes}</td>

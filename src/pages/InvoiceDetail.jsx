@@ -38,7 +38,7 @@ const InvoiceDetail = () => {
       case 'Paid': return 'bg-green-100 text-green-800';
       case 'Partially Paid': return 'bg-yellow-100 text-yellow-800';
       case 'Unpaid': return 'bg-red-100 text-red-800';
-      case 'Overdue': return 'bg-purple-100 text-purple-800';
+      case 'Overdue': return 'bg-orange-200 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -64,7 +64,7 @@ const InvoiceDetail = () => {
             <h2 className="text-3xl font-bold text-gray-800 mb-6">Invoice Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-gray-700 text-lg">
               <div><span className="font-semibold text-gray-600">Client:</span> {invoice.clientName}</div>
-              <div><span className="font-semibold text-gray-600">Amount:</span> <span className="font-bold">${invoice.amount.toFixed(2)}</span></div>
+              <div><span className="font-semibold text-gray-600">Amount:</span> <span className="font-bold">₹{invoice.amount.toFixed(2)}</span></div>
               <div><span className="font-semibold text-gray-600">Due Date:</span> {invoice.dueDate}</div>
               <div>
                 <span className="font-semibold text-gray-600">Status:</span>
@@ -72,8 +72,8 @@ const InvoiceDetail = () => {
                   {invoice.status}
                 </span>
               </div>
-              <div><span className="font-semibold text-gray-600">Paid Amount:</span> <span className="font-bold">${invoice.paidAmount.toFixed(2)}</span></div>
-              <div><span className="font-semibold text-gray-600">Balance Due:</span> <span className="font-bold text-red-700">${(invoice.amount - invoice.paidAmount).toFixed(2)}</span></div>
+              <div><span className="font-semibold text-gray-600">Paid Amount:</span> <span className="font-bold">₹{invoice.paidAmount.toFixed(2)}</span></div>
+              <div><span className="font-semibold text-gray-600">Balance Due:</span> <span className="font-bold text-red-700">₹{(invoice.amount - invoice.paidAmount).toFixed(2)}</span></div>
             </div>
             <div className="mt-10 flex justify-end">
               <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md

@@ -21,9 +21,9 @@ const Dashboard = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <SummaryCard title="Total Clients" value={clients.length} />
-            <SummaryCard title="Total Invoiced" value={`$${totalInvoiced.toFixed(2)}`} />
-            <SummaryCard title="Total Paid" value={`$${totalPaid.toFixed(2)}`} />
-            <SummaryCard title="Total Outstanding" value={`$${totalOutstanding.toFixed(2)}`} />
+            <SummaryCard title="Total Invoiced" value={`₹${totalInvoiced.toFixed(2)}`} />
+            <SummaryCard title="Total Paid" value={`₹${totalPaid.toFixed(2)}`} />
+            <SummaryCard title="Total Outstanding" value={`₹${totalOutstanding.toFixed(2)}`} />
           </div>
 
           <div className="bg-white shadow-xl rounded-xl p-8 border border-gray-200">
@@ -32,7 +32,7 @@ const Dashboard = () => {
               <ul className="list-disc pl-6 space-y-3">
                 {overdueInvoices.map(invoice => (
                   <li key={invoice.id} className="text-lg text-gray-700">
-                    Invoice <span className="font-semibold text-red-700">{invoice.id}</span> for <span className="font-semibold">{invoice.clientName}</span> - <span className="font-bold text-red-700">${invoice.amount.toFixed(2)}</span> (Due: {invoice.dueDate})
+                    Invoice <span className="font-semibold text-red-700">{invoice.id}</span> for <span className="font-semibold">{invoice.clientName}</span> - <span className="font-bold text-red-700">₹{invoice.amount.toFixed(2)}</span> (Due: {invoice.dueDate})
                   </li>
                 ))}
               </ul>

@@ -69,7 +69,7 @@ const ClientDetail = () => {
               <div><span className="font-semibold text-gray-600">Phone:</span> {client.phone}</div>
               <div className="col-span-1 md:col-span-2"><span className="font-semibold text-gray-600">Address:</span> {client.address}</div>
               <div className="col-span-1 md:col-span-2 text-3xl font-extrabold text-red-700 mt-4">
-                Outstanding Balance: ${outstandingBalance.toFixed(2)}
+                Outstanding Balance: ₹{outstandingBalance.toFixed(2)}
               </div>
             </div>
           </div>

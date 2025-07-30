@@ -7,7 +7,7 @@ const InvoiceTable = ({ invoices }) => {
       case 'Paid': return 'bg-green-100 text-green-800';
       case 'Partially Paid': return 'bg-yellow-100 text-yellow-800';
       case 'Unpaid': return 'bg-red-100 text-red-800';
-      case 'Overdue': return 'bg-purple-100 text-purple-800';
+      case 'Overdue': return 'bg-orange-200 text-orange-900';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -30,7 +30,7 @@ const InvoiceTable = ({ invoices }) => {
             <tr key={invoice.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
               <td className="py-4 px-6 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.id}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{invoice.clientName}</td>
-              <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">${invoice.amount.toFixed(2)}</td>
+              <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">₹{invoice.amount.toFixed(2)}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{invoice.dueDate}</td>
               <td className="py-4 px-6 whitespace-nowrap text-center">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
