@@ -3,16 +3,69 @@ import Navbar from '../components/Navbar';
 import ClientTable from '../components/ClientTable';
 import Modal from '../components/Modal';
 import { clients } from '../data/clients';
+import { db } from '../../firebase'; // Import Firestore db
+import { collection, addDoc } from 'firebase/firestore'; // Firestore functions
 
 const Clients = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    clientName: '',
+    clientEmail: '',
+    clientPhone: '',
+    clientAddress: '',
+  });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const handleAddClientClick = () => {
     setIsModalOpen(true);
+    setError('');
+    setSuccess('');
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    setFormData({
+      clientName: '',
+      clientEmail: '',
+      clientPhone: '',
+      clientAddress: '',
+    });
+    setError('');
+    setSuccess('');
+  };
+
+  const handleInputChange = (e) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    // Basic form validation
+    if (!formData.clientName || !formData.clientEmail) {
+      setError('Client Name and Email are required.');
+      return;
+    }
+
+    try {
+      // Add client to Firestore 'clients' collection
+      await addDoc(collection(db, 'clients'), {
+        name: formData.clientName,
+        email: formData.clientEmail,
+        phone: formData.clientPhone,
+        address: formData.clientAddress,
+        createdAt: new Date(),
+      });
+      setSuccess('Client added successfully!');
+      handleCloseModal(); // Close modal on success
+    } catch (err) {
+      console.error('Error adding client:', err);
+      setError('Failed to add client. Please try again.');
+    }
   };
 
   return (
@@ -33,7 +86,9 @@ const Clients = () => {
         <ClientTable clients={clients} />
 
         <Modal isOpen={isModalOpen} onClose={handleCloseModal} title="Add New Client">
-          <form className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {success && <p className="text-green-500 text-sm">{success}</p>}
             <div>
               <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="clientName">
                 Client Name
@@ -41,8 +96,11 @@ const Clients = () => {
               <input
                 type="text"
                 id="clientName"
+                value={formData.clientName}
+                onChange={handleInputChange}
                 className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 placeholder="John Doe"
+                required
               />
             </div>
             <div>
@@ -52,8 +110,11 @@ const Clients = () => {
               <input
                 type="email"
                 id="clientEmail"
+                value={formData.clientEmail}
+                onChange={handleInputChange}
                 className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 placeholder="john.doe@example.com"
+                required
               />
             </div>
             <div>
@@ -63,6 +124,8 @@ const Clients = () => {
               <input
                 type="text"
                 id="clientPhone"
+                value={formData.clientPhone}
+                onChange={handleInputChange}
                 className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 placeholder="123-456-7890"
               />
@@ -73,18 +136,19 @@ const Clients = () => {
               </label>
               <textarea
                 id="clientAddress"
+                value={formData.clientAddress}
+                onChange={handleInputChange}
                 className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent h-24"
                 placeholder="123 Main St, Anytown, USA"
               ></textarea>
             </div>
             <div className="flex justify-end pt-4">
               <button
-                type="button"
-                onClick={handleCloseModal}
+                type="submit"
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md
                            transition duration-200 ease-in-out transform hover:scale-105"
               >
-                Save Client (Non-functional)
+                Save Client
               </button>
             </div>
           </form>
