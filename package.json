@@ -13,6 +13,7 @@
     "@tailwindcss/vite": "^4.0.14",
     "autoprefixer": "^10.4.21",
     "eslint-plugin-react": "^7.37.5",
+    "firebase": "^12.0.0",
     "framer-motion": "^12.5.0",
     "lucide-react": "^0.482.0",
     "postcss": "^8.5.6",
