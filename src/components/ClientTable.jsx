@@ -1,7 +1,68 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { db } from '../../firebase'; // Import Firestore db
+import { collection, onSnapshot } from 'firebase/firestore'; // Use onSnapshot for real-time updates
 
-const ClientTable = ({ clients }) => {
+const ClientTable = () => {
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Subscribe to real-time updates from Firestore
+  useEffect(() => {
+    setLoading(true);
+    const clientsCollection = collection(db, 'clients');
+    const unsubscribe = onSnapshot(
+      clientsCollection,
+      (snapshot) => {
+        const clientsList = snapshot.docs.map((doc) => ({
+          id: doc.id, // Use Firestore document ID as the client ID
+          name: doc.data().name,
+          email: doc.data().email,
+          phone: doc.data().phone,
+          address: doc.data().address,
+        }));
+        setClients(clientsList);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching clients:', err.code, err.message);
+        setError('Failed to load clients. Please try again.');
+        setLoading(false);
+      }
+    );
+
+    // Cleanup subscription on component unmount
+    return () => unsubscribe();
+  }, []);
+
+  // Render loading state
+  if (loading) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-gray-600">Loading clients...</p>
+      </div>
+    );
+  }
+
+  // Render error state
+  if (error) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  // Render empty state
+  if (clients.length === 0) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-gray-600">No clients found.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto bg-white rounded-lg shadow-xl border border-gray-200">
       <table className="min-w-full divide-y divide-gray-200">
@@ -15,7 +76,7 @@ const ClientTable = ({ clients }) => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {clients.map(client => (
+          {clients.map((client) => (
             <tr key={client.id} className="hover:bg-gray-50 transition-colors duration-150 ease-in-out">
               <td className="py-4 px-6 whitespace-nowrap text-sm font-medium text-gray-900">{client.name}</td>
               <td className="py-4 px-6 whitespace-nowrap text-sm text-gray-700">{client.phone}</td>
