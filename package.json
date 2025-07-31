@@ -16,6 +16,8 @@
     "eslint-plugin-react": "^7.37.5",
     "firebase": "^12.0.0",
     "framer-motion": "^12.5.0",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.482.0",
     "postcss": "^8.5.6",
     "react": "^19.0.0",
