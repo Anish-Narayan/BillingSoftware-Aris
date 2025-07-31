@@ -4,9 +4,9 @@ const Modal = ({ isOpen, onClose, children, title }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-lg transform transition-all duration-300 ease-out scale-100 opacity-100">
-        <div className="flex justify-between items-center border-b pb-4 mb-6">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-lg transform transition-all duration-300 ease-out scale-100 opacity-100 border border-gray-200">
+        <div className="flex justify-between items-center border-b border-gray-200 pb-4 mb-6">
           <h3 className="text-2xl font-semibold text-gray-800">{title}</h3>
           <button
             onClick={onClose}

@@ -7,7 +7,7 @@ const InvoiceTable = ({ invoices }) => {
       case 'Paid': return 'bg-green-100 text-green-800';
       case 'Partially Paid': return 'bg-yellow-100 text-yellow-800';
       case 'Unpaid': return 'bg-red-100 text-red-800';
-      case 'Overdue': return 'bg-orange-200 text-orange-900';
+      case 'Overdue': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };

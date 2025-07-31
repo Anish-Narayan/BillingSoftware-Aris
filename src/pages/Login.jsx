@@ -13,7 +13,7 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-10 rounded-xl shadow-2xl w-full max-w-md border border-gray-200">
-        <h2 className="text-3xl font-bold text-center text-gray-800 mb-8">BillingPro Login</h2>
+        <h2 className="text-3xl font-bold text-gray-800 text-center mb-8">BillingPro Login</h2>
         <form onSubmit={handleLogin}>
           <div className="mb-6">
             <label htmlFor="email" className="block text-gray-700 text-sm font-semibold mb-2">Email Address:</label>
