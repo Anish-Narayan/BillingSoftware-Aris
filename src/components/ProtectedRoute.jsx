@@ -21,7 +21,6 @@ const ProtectedRoute = () => {
   // 2. If the check is complete, either render the protected content or redirect
   return loggedIn ? (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
       <main className="p-4 md:p-8">
         <Outlet /> 
       </main>
