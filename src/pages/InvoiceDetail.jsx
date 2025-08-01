@@ -73,9 +73,9 @@ const InvoiceDetail = () => {
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
-    doc.text('BillingPro Inc.', 14, 40);
-    doc.text('123 App Street, Suite 456', 14, 45);
-    doc.text('Tech City, TC 78901', 14, 50);
+    doc.text('Aris Innovations', 14, 40);
+    doc.text('Address line 2', 14, 45);
+    doc.text('Address line 3', 14, 50);
     
     doc.setLineWidth(0.1);
     doc.line(14, 55, pageWidth - 14, 55);
