@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 // Import Firebase auth functions
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 // Adjust the import path to your Firebase config file
-import { auth } from '../../firebase'; 
+import { auth } from '../../firebase';
 
 const Navbar = () => {
   const location = useLocation();
@@ -35,7 +35,7 @@ const Navbar = () => {
     try {
       await signOut(auth);
       // Redirect to login or home page after logout
-      navigate('/login'); 
+      navigate('/login');
     } catch (error) {
       console.error("Failed to log out:", error);
     }
@@ -46,7 +46,7 @@ const Navbar = () => {
       {/* Left Section: Brand and Navigation */}
       <div className="flex items-center space-x-8">
         <Link to="/dashboard" className="flex items-center space-x-2 text-indigo-700 hover:text-indigo-900 transition-colors duration-200">
-          <span className="text-3xl font-extrabold">BS</span>
+          <img src="/arisinnovation_logo.jpeg" alt="Logo" className="h-10 w-10 object-contain" />
           <span className="text-2xl font-bold">BillingSystem</span>
         </Link>
 
@@ -73,15 +73,15 @@ const Navbar = () => {
         {/* User Info and Logout: Displayed only if a user is logged in */}
         {user ? (
           <div className="flex items-center space-x-4">
-             <div className="text-right hidden sm:block">
-                <span className="text-gray-700 font-medium">
-                  {/* Use displayName or fallback to the email prefix */}
-                  Welcome, {user.displayName || user.email.split('@')[0]}
-                </span>
-                <p className="text-gray-500 text-sm">
-                  {user.email}
-                </p>
-             </div>
+            <div className="text-right hidden sm:block">
+              <span className="text-gray-700 font-medium">
+                {/* Use displayName or fallback to the email prefix */}
+                Welcome, {user.displayName || user.email.split('@')[0]}
+              </span>
+              <p className="text-gray-500 text-sm">
+                {user.email}
+              </p>
+            </div>
             <button
               onClick={handleLogout}
               className="flex items-center space-x-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 ease-in-out transform hover:scale-105 shadow-md"
