@@ -22,12 +22,7 @@ const SummaryCard = ({ title, value, percentageChange, colorClass, alertCount })
         )}
       </div>
       <p className="text-4xl font-extrabold text-gray-800">{value}</p>
-      {percentageChange && (
-        <p className={`mt-2 text-sm flex items-center ${getPercentageColor(percentageChange)}`}>
-          {/* Removed TrendingUpIcon */}
-          {percentageChange}% from last month
-        </p>
-      )}
+
     </div>
   );
 };

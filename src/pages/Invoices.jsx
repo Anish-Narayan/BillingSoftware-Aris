@@ -1,21 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// src/pages/Invoices.jsx
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import InvoiceTable from '../components/InvoiceTable';
-import Modal from '../components/Modal';
-import Select from 'react-select';
+import AddEditInvoiceModal from '../components/AddEditInvoiceModal'; // Import the new modal
 import { db } from '../../firebase';
 import {
   collection,
   onSnapshot,
   query,
   orderBy,
-  addDoc,
-  updateDoc,
   deleteDoc,
   doc,
-  getDocs, // <-- Import getDocs for one-time fetch
-  where,    // <-- Import where for querying
-  serverTimestamp
 } from 'firebase/firestore';
 
 const Invoices = () => {
@@ -26,17 +21,7 @@ const Invoices = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
-  const [formState, setFormState] = useState({
-    invoiceNumber: '',
-    selectedClient: null,
-    totalAmount: '',
-    issueDate: new Date().toISOString().split('T')[0],
-    dueDate: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
 
-  // --- Data Fetching ---
   useEffect(() => {
     setLoading(true);
     const invoicesQuery = query(collection(db, 'invoices'), orderBy('issueDate', 'desc'));
@@ -45,132 +30,40 @@ const Invoices = () => {
     const unsubInvoices = onSnapshot(invoicesQuery, (snapshot) => {
       setInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
+    }, (err) => {
+        console.error("Error fetching invoices:", err);
+        setError("Failed to load invoices.");
+        setLoading(false);
     });
+
     const unsubClients = onSnapshot(clientsQuery, (snapshot) => {
       setClients(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    }, (err) => {
+        console.error("Error fetching clients:", err);
+        setError("Failed to load client data.");
     });
 
     return () => { unsubInvoices(); unsubClients(); };
   }, []);
-
-  const clientOptions = useMemo(() =>
-    clients.map(c => ({ value: c.id, label: `${c.name} (${c.email})`, ...c })),
-    [clients]
-  );
   
-  // --- Form and Modal Handlers ---
-  const resetForm = () => {
-    setFormState({
-      invoiceNumber: '', selectedClient: null, totalAmount: '',
-      issueDate: new Date().toISOString().split('T')[0], dueDate: '',
-    });
-    setFormError('');
-    setEditingInvoiceId(null);
-  };
-
   const handleOpenCreateModal = () => {
-    resetForm();
+    setEditingInvoiceId(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (invoiceId) => {
-    const invoiceToEdit = invoices.find(inv => inv.id === invoiceId);
-    if (!invoiceToEdit) return;
-    const clientForInvoice = clientOptions.find(opt => opt.value === invoiceToEdit.clientId);
     setEditingInvoiceId(invoiceId);
-    setFormState({
-      invoiceNumber: invoiceToEdit.invoiceNumber, selectedClient: clientForInvoice || null,
-      totalAmount: invoiceToEdit.totalAmount, issueDate: invoiceToEdit.issueDate, dueDate: invoiceToEdit.dueDate,
-    });
     setIsModalOpen(true);
   };
   
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setTimeout(resetForm, 300); 
-  };
-
-  const handleInputChange = (e) => {
-    const { id, value } = e.target;
-    setFormState(prev => ({ ...prev, [id]: value }));
-  };
-  
-  const handleClientChange = (selectedOption) => {
-    setFormState(prev => ({ ...prev, selectedClient: selectedOption }));
-  };
-
-  const handleSaveOrUpdateInvoice = async (e) => {
-    e.preventDefault();
-    const { invoiceNumber, selectedClient, totalAmount, issueDate, dueDate } = formState;
-
-    if (!invoiceNumber || !selectedClient || !totalAmount || !issueDate || !dueDate) {
-      setFormError('Please fill out all fields.');
-      return;
-    }
-    setSaving(true);
-    setFormError('');
-
-    // --- Uniqueness Check ---
-    const trimmedInvoiceNumber = invoiceNumber.trim();
-    const q = query(collection(db, 'invoices'), where('invoiceNumber', '==', trimmedInvoiceNumber));
-    const querySnapshot = await getDocs(q);
-    
-    let isDuplicate = false;
-    if (!querySnapshot.empty) {
-      if (editingInvoiceId) { // In Edit Mode
-        // It's not a duplicate if the found doc is the one we are currently editing
-        const isSameDoc = querySnapshot.docs.length === 1 && querySnapshot.docs[0].id === editingInvoiceId;
-        if (!isSameDoc) {
-          isDuplicate = true;
-        }
-      } else { // In Create Mode
-        isDuplicate = true;
-      }
-    }
-
-    if (isDuplicate) {
-      setFormError('This invoice number is already in use. Please choose another.');
-      setSaving(false);
-      return;
-    }
-    // --- End Uniqueness Check ---
-
-    const invoiceData = {
-      invoiceNumber: trimmedInvoiceNumber,
-      clientId: selectedClient.id,
-      clientName: selectedClient.name,
-      totalAmount: parseFloat(totalAmount),
-      issueDate,
-      dueDate,
-    };
-
-    try {
-      if (editingInvoiceId) {
-        const invoiceRef = doc(db, 'invoices', editingInvoiceId);
-        // Only update the form fields, preserving status and paidAmount
-        await updateDoc(invoiceRef, invoiceData);
-      } else {
-        await addDoc(collection(db, 'invoices'), {
-          ...invoiceData,
-          status: 'unpaid', // Set initial status
-          paidAmount: 0,   // Set initial paid amount
-          createdAt: serverTimestamp()
-        });
-      }
-      handleCloseModal();
-    } catch (err) {
-      console.error("Error saving invoice: ", err);
-      setFormError('Failed to save invoice. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    setEditingInvoiceId(null);
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this invoice? This also deletes associated payments.')) {
+    if (window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
       try {
-        // Advanced: You might also want to delete all payments linked to this invoice.
-        // This is a more complex operation involving a batch write to delete multiple docs.
         await deleteDoc(doc(db, 'invoices', id));
       } catch (err) {
         console.error("Error deleting invoice: ", err);
@@ -207,49 +100,13 @@ const Invoices = () => {
         {renderContent()}
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingInvoiceId ? 'Edit Invoice' : 'Create New Invoice'}>
-        <form onSubmit={handleSaveOrUpdateInvoice} className="space-y-4">
-          {formError && <p className="text-red-500 text-center font-semibold">{formError}</p>}
-          <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="client">Client</label>
-            <Select
-              id="client"
-              options={clientOptions}
-              value={formState.selectedClient}
-              onChange={handleClientChange}
-              placeholder="Select a client..."
-              classNamePrefix="react-select"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="invoiceNumber">Invoice #</label>
-              <input type="text" id="invoiceNumber" value={formState.invoiceNumber} onChange={handleInputChange} className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" required />
-            </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="totalAmount">Amount (₹)</label>
-              <input type="number" id="totalAmount" step="0.01" value={formState.totalAmount} onChange={handleInputChange} className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" required />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="issueDate">Issue Date</label>
-              <input type="date" id="issueDate" value={formState.issueDate} onChange={handleInputChange} className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" required />
-            </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="dueDate">Due Date</label>
-              <input type="date" id="dueDate" value={formState.dueDate} onChange={handleInputChange} className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" required />
-            </div>
-          </div>
-          <div className="flex justify-end pt-4 space-x-3">
-            <button type="button" onClick={handleCloseModal} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-lg">Cancel</button>
-            <button type="submit" disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg disabled:bg-indigo-400 disabled:cursor-not-allowed">
-              {saving ? 'Saving...' : (editingInvoiceId ? 'Update Invoice' : 'Save Invoice')}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      <AddEditInvoiceModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onSuccess={handleCloseModal} // onSnapshot handles UI update, so just close modal
+        invoiceToEditId={editingInvoiceId}
+        clients={clients}
+      />
     </div>
   );
 };

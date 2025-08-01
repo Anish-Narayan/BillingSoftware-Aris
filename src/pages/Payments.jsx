@@ -13,7 +13,7 @@ import {
   where,
   doc,
   writeBatch,
-  getDocs,
+  getDoc, // Changed from getDocs to get a single document
   runTransaction,
   deleteDoc
 } from 'firebase/firestore';
@@ -22,7 +22,8 @@ import Select from 'react-select';
 const Payments = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [payments, setPayments] = useState([]);
-  const [activeInvoices, setActiveInvoices] = useState([]); // Invoices that are not fully paid
+  // Invoices that are not fully paid, used for the dropdown
+  const [activeInvoices, setActiveInvoices] = useState([]);
 
 
   // State for the new payment form
@@ -43,8 +44,8 @@ const Payments = () => {
       setPayments(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
 
-    // Fetch invoices that are 'unpaid' or 'partially paid'
-    const invoicesQuery = query(collection(db, 'invoices'), where('status', 'in', ['unpaid', 'partially paid']));
+    // Fetch invoices that are 'unpaid', 'partially paid', or 'overdue' for the dropdown
+    const invoicesQuery = query(collection(db, 'invoices'), where('status', 'in', ['unpaid', 'partially paid', 'overdue']));
     const unsubInvoices = onSnapshot(invoicesQuery, (snapshot) => {
       setActiveInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
@@ -78,7 +79,7 @@ const Payments = () => {
   };
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    resetForm();
+    setTimeout(resetForm, 300);
   };
 
   // --- Core Logic for Saving a Payment ---
@@ -112,8 +113,11 @@ const Payments = () => {
     try {
       const totalPaidSoFar = selectedInvoice.paidAmount || 0;
       const newTotalPaid = totalPaidSoFar + newPaymentAmount;
-      const newStatus = newTotalPaid >= selectedInvoice.totalAmount ? 'Paid' : 'Partially Paid';
+      
+      // FIX: Standardize status to lowercase
+      const newStatus = newTotalPaid >= selectedInvoice.totalAmount ? 'paid' : 'partially paid';
 
+      // 1. Create the new payment document
       const paymentRef = doc(collection(db, 'payments'));
       batch.set(paymentRef, {
         invoiceId: selectedInvoice.id,
@@ -127,12 +131,14 @@ const Payments = () => {
         createdAt: serverTimestamp(),
       });
 
+      // 2. Update the corresponding invoice
       const invoiceRef = doc(db, 'invoices', selectedInvoice.id);
       batch.update(invoiceRef, {
         status: newStatus,
         paidAmount: newTotalPaid
       });
 
+      // 3. Commit both operations atomically
       await batch.commit();
       handleCloseModal();
 
@@ -144,32 +150,51 @@ const Payments = () => {
     }
   };
 
-  // --- Core Logic for Deleting a Payment ---
+
   const handleDeletePayment = async (paymentId, invoiceId, paymentAmount) => {
-    if (window.confirm('Are you sure you want to delete this payment? This will update the linked invoice.')) {
-      const invoiceRef = doc(db, 'invoices', invoiceId);
+    if (!window.confirm('Are you sure you want to delete this payment? This will update the linked invoice.')) {
+        return;
+    }
+    
+    try {
+      // Use a batch to perform multiple operations. This is more robust than a transaction for this use case.
+      const batch = writeBatch(db);
+
+      // 1. Always delete the payment, regardless of whether the invoice exists.
       const paymentRef = doc(db, 'payments', paymentId);
-      try {
-        // Use a transaction to ensure both operations succeed or fail together
-        await runTransaction(db, async (transaction) => {
-          const invoiceDoc = await transaction.get(invoiceRef);
-          if (!invoiceDoc.exists()) throw "Invoice not found!";
+      batch.delete(paymentRef);
 
-          const currentPaidAmount = invoiceDoc.data().paidAmount || 0;
-          const newPaidAmount = currentPaidAmount - paymentAmount;
+      // 2. Try to find and update the associated invoice.
+      const invoiceRef = doc(db, 'invoices', invoiceId);
+      const invoiceDoc = await getDoc(invoiceRef);
 
-          let newStatus = 'unpaid';
-          if (newPaidAmount > 0) {
-            newStatus = 'Partially Paid';
-          }
+      // 3. Only update the invoice if it exists.
+      if (invoiceDoc.exists()) {
+        const invoiceData = invoiceDoc.data();
+        const currentPaidAmount = invoiceData.paidAmount || 0;
+        const newPaidAmount = currentPaidAmount - paymentAmount;
+        
+        let newStatus;
+        if (newPaidAmount <= 0) {
+            // FIX: If fully reversed, check due date to determine if it's 'unpaid' or 'overdue'
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const invoiceDueDate = new Date(invoiceData.dueDate);
+            newStatus = invoiceDueDate < today ? 'overdue' : 'unpaid';
+        } else {
+            // FIX: Standardize status to lowercase
+            newStatus = 'partially paid';
+        }
 
-          transaction.update(invoiceRef, { paidAmount: newPaidAmount, status: newStatus });
-          transaction.delete(paymentRef);
-        });
-      } catch (error) {
-        console.error("Error deleting payment in transaction: ", error);
-        alert("Failed to delete the payment.");
+        batch.update(invoiceRef, { paidAmount: newPaidAmount, status: newStatus });
       }
+
+      // 4. Commit the batch. This will delete the payment and update the invoice (if found) in one go.
+      await batch.commit();
+
+    } catch (error) {
+      console.error("Error deleting payment: ", error);
+      alert("Failed to delete the payment. Please check the console for more details.");
     }
   };
 
@@ -198,12 +223,14 @@ const Payments = () => {
               <Select
                 id="invoice"
                 options={invoiceOptions}
-                value={selectedInvoice ? { value: selectedInvoice.id, label: `${selectedInvoice.invoiceNumber} - ${selectedInvoice.clientName} (₹${(selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)).toFixed(2)} due)` } : null}
+                value={selectedInvoice}
                 onChange={(option) => {
                   setSelectedInvoice(option);
                   const balanceDue = option ? (option.totalAmount - (option.paidAmount || 0)).toFixed(2) : '';
                   setPaymentAmount(balanceDue);
                 }}
+                getOptionValue={(option) => option.id}
+                getOptionLabel={(option) => option.label}
                 placeholder="Search by invoice # or client name..."
                 isClearable
                 classNamePrefix="react-select"
@@ -211,8 +238,8 @@ const Payments = () => {
               />
             </div>
             <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentAmount">Amount</label>
-              <input type="number" id="paymentAmount" className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required />
+              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentAmount">Amount (₹)</label>
+              <input type="number" step="0.01" id="paymentAmount" className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required />
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentDate">Date</label>
@@ -231,7 +258,7 @@ const Payments = () => {
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentNotes">Notes (Optional)</label>
-              <textarea id="paymentNotes" className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 h-24" placeholder="e.g., Early payment discount" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)}></textarea>
+              <textarea id="paymentNotes" className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 h-24" placeholder="e.g., Transaction ID, check number" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)}></textarea>
             </div>
             <div className="flex justify-end pt-4 space-x-3">
               <button type="button" onClick={handleCloseModal} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-lg">Cancel</button>
