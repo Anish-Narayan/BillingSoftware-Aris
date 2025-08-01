@@ -13,8 +13,7 @@ import {
   where,
   doc,
   writeBatch,
-  getDoc, // Changed from getDocs to get a single document
-  runTransaction,
+  getDoc,
   deleteDoc
 } from 'firebase/firestore';
 import Select from 'react-select';
@@ -22,7 +21,6 @@ import Select from 'react-select';
 const Payments = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [payments, setPayments] = useState([]);
-  // Invoices that are not fully paid, used for the dropdown
   const [activeInvoices, setActiveInvoices] = useState([]);
 
 
@@ -38,13 +36,11 @@ const Payments = () => {
 
   // --- Data Fetching ---
   useEffect(() => {
-    // Fetch all payments
     const paymentsQuery = query(collection(db, 'payments'), orderBy('createdAt', 'desc'));
     const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
       setPayments(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
 
-    // Fetch invoices that are 'unpaid', 'partially paid', or 'overdue' for the dropdown
     const invoicesQuery = query(collection(db, 'invoices'), where('status', 'in', ['unpaid', 'partially paid', 'overdue']));
     const unsubInvoices = onSnapshot(invoicesQuery, (snapshot) => {
       setActiveInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
@@ -102,7 +98,6 @@ const Payments = () => {
     }
 
     const balanceDue = selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0);
-    // Add a small tolerance for floating point math issues
     if (newPaymentAmount > balanceDue + 0.01) {
       setFormError(`Payment (₹${newPaymentAmount.toFixed(2)}) exceeds balance due (₹${balanceDue.toFixed(2)}).`);
       setSaving(false);
@@ -114,10 +109,24 @@ const Payments = () => {
       const totalPaidSoFar = selectedInvoice.paidAmount || 0;
       const newTotalPaid = totalPaidSoFar + newPaymentAmount;
       
-      // FIX: Standardize status to lowercase
-      const newStatus = newTotalPaid >= selectedInvoice.totalAmount ? 'paid' : 'partially paid';
+      // ====================================================================
+      // === MODIFIED LOGIC STARTS HERE ===
+      // ====================================================================
+      let newStatus;
+      if (newTotalPaid >= selectedInvoice.totalAmount) {
+        // If the invoice is fully paid, the status is always 'paid'.
+        newStatus = 'paid';
+      } else if (selectedInvoice.status === 'overdue') {
+        // If it's not fully paid but was already overdue, it REMAINS 'overdue'.
+        newStatus = 'overdue';
+      } else {
+        // Otherwise (it was 'unpaid' or 'partially paid' before due date), it becomes 'partially paid'.
+        newStatus = 'partially paid';
+      }
+      // ====================================================================
+      // === MODIFIED LOGIC ENDS HERE ===
+      // ====================================================================
 
-      // 1. Create the new payment document
       const paymentRef = doc(collection(db, 'payments'));
       batch.set(paymentRef, {
         invoiceId: selectedInvoice.id,
@@ -131,14 +140,12 @@ const Payments = () => {
         createdAt: serverTimestamp(),
       });
 
-      // 2. Update the corresponding invoice
       const invoiceRef = doc(db, 'invoices', selectedInvoice.id);
       batch.update(invoiceRef, {
         status: newStatus,
         paidAmount: newTotalPaid
       });
 
-      // 3. Commit both operations atomically
       await batch.commit();
       handleCloseModal();
 
@@ -157,39 +164,42 @@ const Payments = () => {
     }
     
     try {
-      // Use a batch to perform multiple operations. This is more robust than a transaction for this use case.
       const batch = writeBatch(db);
-
-      // 1. Always delete the payment, regardless of whether the invoice exists.
       const paymentRef = doc(db, 'payments', paymentId);
       batch.delete(paymentRef);
-
-      // 2. Try to find and update the associated invoice.
       const invoiceRef = doc(db, 'invoices', invoiceId);
       const invoiceDoc = await getDoc(invoiceRef);
 
-      // 3. Only update the invoice if it exists.
       if (invoiceDoc.exists()) {
         const invoiceData = invoiceDoc.data();
         const currentPaidAmount = invoiceData.paidAmount || 0;
         const newPaidAmount = currentPaidAmount - paymentAmount;
         
+        // ====================================================================
+        // === MODIFIED LOGIC STARTS HERE ===
+        // ====================================================================
         let newStatus;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const invoiceDueDate = new Date(invoiceData.dueDate);
+
         if (newPaidAmount <= 0) {
-            // FIX: If fully reversed, check due date to determine if it's 'unpaid' or 'overdue'
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const invoiceDueDate = new Date(invoiceData.dueDate);
+            // If no payment is left, status depends purely on the due date.
             newStatus = invoiceDueDate < today ? 'overdue' : 'unpaid';
+        } else if (invoiceDueDate < today) {
+            // If there's a balance and it's past due, it must be 'overdue'.
+            newStatus = 'overdue';
         } else {
-            // FIX: Standardize status to lowercase
+            // If there's a balance and it's not past due, it's 'partially paid'.
             newStatus = 'partially paid';
         }
+        // ====================================================================
+        // === MODIFIED LOGIC ENDS HERE ===
+        // ====================================================================
 
         batch.update(invoiceRef, { paidAmount: newPaidAmount, status: newStatus });
       }
 
-      // 4. Commit the batch. This will delete the payment and update the invoice (if found) in one go.
       await batch.commit();
 
     } catch (error) {
@@ -198,6 +208,7 @@ const Payments = () => {
     }
   };
 
+  // --- JSX Rendering ---
   return (
     <div className="bg-gray-100 min-h-screen">
       <Navbar />

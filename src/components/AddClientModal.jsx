@@ -32,6 +32,17 @@ const AddClientModal = ({ isOpen, onClose, onSuccess }) => {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
+  const handlePhoneChange = (e) => {
+    const value = e.target.value;
+    // Allow only digits
+    if (/^\d{0,10}$/.test(value)) {
+      setFormData({
+        ...formData,
+        clientPhone: value,
+      });
+    }
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -105,11 +116,15 @@ const AddClientModal = ({ isOpen, onClose, onSuccess }) => {
             type="text"
             id="clientPhone"
             value={formData.clientPhone}
-            onChange={handleInputChange}
+            onChange={handlePhoneChange}
+            maxLength={10}
+            pattern="\d{10}"
             className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            placeholder="123-456-7890"
+            placeholder="1234567890"
+            required
           />
         </div>
+
         <div>
           <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="clientAddress">
             Address
