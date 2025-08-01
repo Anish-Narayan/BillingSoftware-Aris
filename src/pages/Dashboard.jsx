@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import SummaryCard from '../components/SummaryCard';
 import AddClientModal from '../components/AddClientModal';
 import AddEditInvoiceModal from '../components/AddEditInvoiceModal';
+import AddPaymentModal from '../components/AddPaymentModal';
 import { Link } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
@@ -16,13 +17,17 @@ const Dashboard = () => {
   const [outstandingAmount, setOutstandingAmount] = useState(0);
   const [overdueAmount, setOverdueAmount] = useState(0);
   const [overdueInvoices, setOverdueInvoices] = useState([]);
-  const [clients, setClients] = useState([]); // State for clients list for the modal
+  
+  // State for data to pass to modals
+  const [clients, setClients] = useState([]);
+  const [activeInvoices, setActiveInvoices] = useState([]);
 
   // State for UI control
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const fetchData = async () => {
     setError(null);
@@ -36,34 +41,38 @@ const Dashboard = () => {
           getDocs(invoicesQuery)
       ]);
 
-      // Process Clients data
+      // --- Process Clients Data ---
       setTotalClients(clientSnapshot.size);
       setClients(clientSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
 
-      // Process Invoices data
+      // --- Process Invoices Data ---
       const fetchedInvoices = invoiceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Filter for invoices that can receive payments, for the AddPaymentModal
+      setActiveInvoices(fetchedInvoices.filter(inv => ['unpaid', 'partially paid', 'overdue'].includes(inv.status)));
+      
       let invoicedSum = 0, paidSum = 0, currentOverdueSum = 0;
-      const currentOverdueInvoices = [];
+      const currentOverdueInvoicesList = [];
 
       fetchedInvoices.forEach(invoice => {
         const currentTotalAmount = parseFloat(invoice.totalAmount) || 0;
         const currentPaidAmount = parseFloat(invoice.paidAmount) || 0;
         invoicedSum += currentTotalAmount;
         paidSum += currentPaidAmount;
+        
         const outstandingForThisInvoice = currentTotalAmount - currentPaidAmount;
         if (invoice.status === 'overdue' && outstandingForThisInvoice > 0) {
-          currentOverdueInvoices.push(invoice);
+          currentOverdueInvoicesList.push(invoice);
           currentOverdueSum += outstandingForThisInvoice;
         }
       });
 
-      const totalOutstandingSum = invoicedSum - paidSum;
-      const currentOutstandingNotOverdue = totalOutstandingSum - currentOverdueSum;
+      // Set state for summary cards
       setTotalInvoiced(invoicedSum);
       setTotalPaid(paidSum);
-      setOutstandingAmount(currentOutstandingNotOverdue);
       setOverdueAmount(currentOverdueSum);
-      setOverdueInvoices(currentOverdueInvoices);
+      // Outstanding is total unpaid minus the overdue portion
+      setOutstandingAmount(invoicedSum - paidSum - currentOverdueSum);
+      setOverdueInvoices(currentOverdueInvoicesList);
 
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
@@ -78,10 +87,11 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  // Generic success handler for modals
+  // Generic success handler for all modals to close them and refresh data
   const handleSuccess = () => {
     setIsClientModalOpen(false);
     setIsInvoiceModalOpen(false);
+    setIsPaymentModalOpen(false);
     fetchData(); // Re-fetch all data to update the dashboard
   };
 
@@ -128,9 +138,10 @@ const Dashboard = () => {
           <div className="flex items-center text-3xl font-bold text-gray-800 mb-6">
             <h2>Quick Actions</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-            <QuickActionCard title="Add New Client" description="Register a new client to your system" icon="👤" bgColor="bg-blue-50" iconBgColor="bg-blue-200" iconColor="text-blue-600" onClick={() => setIsClientModalOpen(true)} />
-            <QuickActionCard title="Create Invoice" description="Generate a new invoice for services" icon="📝" bgColor="bg-green-50" iconBgColor="bg-green-200" iconColor="text-green-600" onClick={() => setIsInvoiceModalOpen(true)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <QuickActionCard title="Add New Client" description="Register a new client" icon="👤" bgColor="bg-blue-50" iconBgColor="bg-blue-200" iconColor="text-blue-600" onClick={() => setIsClientModalOpen(true)} />
+            <QuickActionCard title="Create Invoice" description="Generate a new invoice" icon="📝" bgColor="bg-green-50" iconBgColor="bg-green-200" iconColor="text-green-600" onClick={() => setIsInvoiceModalOpen(true)} />
+            <QuickActionCard title="Add Payment" description="Record a new payment" icon="💳" bgColor="bg-yellow-50" iconBgColor="bg-yellow-200" iconColor="text-yellow-600" onClick={() => setIsPaymentModalOpen(true)} />
           </div>
         </div>
 
@@ -163,7 +174,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Reusable Modals */}
+      {/* Render All Reusable Modals */}
       <AddClientModal 
         isOpen={isClientModalOpen} 
         onClose={() => setIsClientModalOpen(false)}
@@ -173,7 +184,13 @@ const Dashboard = () => {
         isOpen={isInvoiceModalOpen} 
         onClose={() => setIsInvoiceModalOpen(false)}
         onSuccess={handleSuccess}
-        clients={clients} // Pass the fetched clients list to the modal
+        clients={clients}
+      />
+      <AddPaymentModal 
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onSuccess={handleSuccess}
+        activeInvoices={activeInvoices}
       />
     </div>
   );

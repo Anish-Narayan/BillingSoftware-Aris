@@ -11,7 +11,8 @@ import {
   getDoc,
   getDocs,
   where,
-  serverTimestamp
+  serverTimestamp,
+  query
 } from 'firebase/firestore';
 
 const AddEditInvoiceModal = ({ isOpen, onClose, onSuccess, invoiceToEditId, clients }) => {
@@ -173,7 +174,7 @@ const AddEditInvoiceModal = ({ isOpen, onClose, onSuccess, invoiceToEditId, clie
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="dueDate">Due Date</label>
-              <input type="date" id="dueDate" value={formState.dueDate} onChange={handleInputChange} className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" required />
+              <input type="date" id="dueDate" value={formState.dueDate} onChange={handleInputChange} className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" min={formState.issueDate} required />
             </div>
           </div>
           <div className="flex justify-end pt-4 space-x-3">
