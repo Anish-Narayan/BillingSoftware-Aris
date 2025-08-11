@@ -1,8 +1,9 @@
 // src/pages/Payments.jsx
+
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import PaymentTable from '../components/PaymentTable';
-import AddPaymentModal from '../components/AddPaymentModal'; // Import the new modal
+import AddPaymentModal from '../components/AddPaymentModal';
 import { db } from '../../firebase';
 import {
   collection,
@@ -13,23 +14,33 @@ import {
   doc,
   writeBatch,
   getDoc,
-  deleteDoc
 } from 'firebase/firestore';
 
 const Payments = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [payments, setPayments] = useState([]);
   const [activeInvoices, setActiveInvoices] = useState([]);
+  const [loading, setLoading] = useState(true); // Added loading state for better UX
 
   useEffect(() => {
-    const paymentsQuery = query(collection(db, 'payments'), orderBy('createdAt', 'desc'));
+    setLoading(true);
+    const paymentsQuery = query(collection(db, 'payments'), orderBy('date', 'desc'));
     const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
       setPayments(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setLoading(false); // Stop loading once payments are fetched
+    }, (error) => {
+      console.error("Error fetching payments:", error);
+      setLoading(false);
     });
 
-    const invoicesQuery = query(collection(db, 'invoices'), where('status', 'in', ['unpaid', 'partially paid', 'overdue']));
+    // FIX #1: Make the query robust by including both lowercase (old data) and capitalized (new data) statuses.
+    const activeStatusList = ['unpaid', 'partially paid', 'overdue', 'Unpaid', 'Partially Paid', 'Overdue'];
+    const invoicesQuery = query(collection(db, 'invoices'), where('status', 'in', activeStatusList));
+    
     const unsubInvoices = onSnapshot(invoicesQuery, (snapshot) => {
       setActiveInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    }, (error) => {
+      console.error("Error fetching active invoices:", error);
     });
 
     return () => {
@@ -48,29 +59,38 @@ const Payments = () => {
       const batch = writeBatch(db);
       const paymentRef = doc(db, 'payments', paymentId);
       batch.delete(paymentRef);
+      
       const invoiceRef = doc(db, 'invoices', invoiceId);
       const invoiceDoc = await getDoc(invoiceRef);
 
       if (invoiceDoc.exists()) {
         const invoiceData = invoiceDoc.data();
         const newPaidAmount = (invoiceData.paidAmount || 0) - paymentAmount;
+        
+        // FIX #2: Use correct capitalized status strings when updating the invoice.
         let newStatus;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const invoiceDueDate = new Date(invoiceData.dueDate);
+        // Ensure dueDate is valid before creating a Date object
+        const invoiceDueDate = invoiceData.dueDate ? new Date(invoiceData.dueDate) : null;
+        
         if (newPaidAmount <= 0) {
-            newStatus = invoiceDueDate < today ? 'overdue' : 'unpaid';
-        } else if (invoiceDueDate < today) {
-            newStatus = 'overdue';
+            newStatus = invoiceDueDate && invoiceDueDate < today ? 'Overdue' : 'Unpaid';
+        } else if (invoiceDueDate && invoiceDueDate < today) {
+            // It remains 'Overdue' if there's still a balance and the due date has passed.
+            newStatus = 'Overdue';
         } else {
-            newStatus = 'partially paid';
+            // If there's a balance but it's not overdue, it's 'Partially Paid'.
+            newStatus = 'Partially Paid';
         }
+        
         batch.update(invoiceRef, { paidAmount: newPaidAmount, status: newStatus });
       }
+      
       await batch.commit();
     } catch (error) {
       console.error("Error deleting payment: ", error);
-      alert("Failed to delete the payment.");
+      alert("Failed to delete the payment. Please try again.");
     }
   };
 
@@ -88,7 +108,12 @@ const Payments = () => {
             Add New Payment
           </button>
         </div>
-        <PaymentTable payments={payments} onDelete={handleDeletePayment} />
+        
+        {loading ? (
+          <p className="text-center text-gray-600">Loading payments...</p>
+        ) : (
+          <PaymentTable payments={payments} onDelete={handleDeletePayment} />
+        )}
         
         <AddPaymentModal
           isOpen={isModalOpen}

@@ -1,12 +1,11 @@
 // src/components/AddPaymentModal.jsx
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
 import Select from 'react-select';
 import { db } from '../../firebase';
 import {
   collection,
-  addDoc,
-  serverTimestamp,
   doc,
   writeBatch
 } from 'firebase/firestore';
@@ -20,7 +19,6 @@ const AddPaymentModal = ({ isOpen, onClose, onSuccess, activeInvoices }) => {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  // Reset form whenever the modal is opened
   useEffect(() => {
     if (isOpen) {
       setSelectedInvoice(null);
@@ -34,10 +32,12 @@ const AddPaymentModal = ({ isOpen, onClose, onSuccess, activeInvoices }) => {
 
   const invoiceOptions = useMemo(() =>
     activeInvoices.map(inv => {
-      const balanceDue = inv.totalAmount - (inv.paidAmount || 0);
+      // FIX: Read from the standardized 'paidAmount' field.
+      const paidSoFar = inv.paidAmount || 0;
+      const balanceDue = inv.totalAmount - paidSoFar;
       return {
         value: inv.id,
-        label: `${inv.invoiceNumber} - ${inv.clientName} (₹${balanceDue.toFixed(2)} due)`,
+        label: `${inv.invoiceNumber || 'INV-N/A'} - ${inv.clientName} (₹${balanceDue.toFixed(2)} due)`,
         ...inv
       };
     }), [activeInvoices]);
@@ -60,8 +60,11 @@ const AddPaymentModal = ({ isOpen, onClose, onSuccess, activeInvoices }) => {
       return;
     }
 
-    const balanceDue = selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0);
-    if (newPaymentAmount > balanceDue + 0.01) {
+    // FIX: Calculate balance based on the standardized 'paidAmount' field.
+    const paidSoFar = selectedInvoice.paidAmount || 0;
+    const balanceDue = selectedInvoice.totalAmount - paidSoFar;
+    
+    if (newPaymentAmount > balanceDue + 0.01) { // Add tolerance for float precision
       setFormError(`Payment (₹${newPaymentAmount.toFixed(2)}) exceeds balance due (₹${balanceDue.toFixed(2)}).`);
       setSaving(false);
       return;
@@ -69,16 +72,16 @@ const AddPaymentModal = ({ isOpen, onClose, onSuccess, activeInvoices }) => {
 
     const batch = writeBatch(db);
     try {
-      const totalPaidSoFar = selectedInvoice.paidAmount || 0;
-      const newTotalPaid = totalPaidSoFar + newPaymentAmount;
+      const newTotalPaid = paidSoFar + newPaymentAmount;
       
+      // FIX: Use correct capitalized status strings.
       let newStatus;
       if (newTotalPaid >= selectedInvoice.totalAmount) {
-        newStatus = 'paid';
-      } else if (selectedInvoice.status === 'overdue') {
-        newStatus = 'overdue';
+        newStatus = 'Paid';
+      } else if (selectedInvoice.status === 'Overdue') {
+        newStatus = 'Overdue'; // Stays 'Overdue' if not fully paid
       } else {
-        newStatus = 'partially paid';
+        newStatus = 'Partially Paid';
       }
 
       const paymentRef = doc(collection(db, 'payments'));
@@ -91,14 +94,17 @@ const AddPaymentModal = ({ isOpen, onClose, onSuccess, activeInvoices }) => {
         date: paymentDate,
         paymentMode: paymentMode,
         notes: paymentNotes,
-        createdAt: serverTimestamp(),
+        createdAt: new Date(),
       });
 
       const invoiceRef = doc(db, 'invoices', selectedInvoice.id);
-      batch.update(invoiceRef, { status: newStatus, paidAmount: newTotalPaid });
+      batch.update(invoiceRef, { 
+        status: newStatus, 
+        paidAmount: newTotalPaid // Update the master paidAmount field
+      });
 
       await batch.commit();
-      onSuccess(); // Notify parent of success
+      onSuccess();
 
     } catch (err) {
       setFormError('Failed to save payment. Please try again.');
@@ -117,27 +123,28 @@ const AddPaymentModal = ({ isOpen, onClose, onSuccess, activeInvoices }) => {
       <form onSubmit={handleSavePayment} className="space-y-6">
         {formError && <p className="text-red-500 text-center mb-4 font-semibold">{formError}</p>}
         <div>
-          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="invoice">Invoice</label>
+          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="invoice">Invoice*</label>
           <Select
             id="invoice" options={invoiceOptions} value={selectedInvoice}
             onChange={(option) => {
               setSelectedInvoice(option);
-              const balanceDue = option ? (option.totalAmount - (option.paidAmount || 0)).toFixed(2) : '';
+              const paidSoFar = option ? (option.paidAmount || 0) : 0;
+              const balanceDue = option ? (option.totalAmount - paidSoFar).toFixed(2) : '';
               setPaymentAmount(balanceDue);
             }}
             placeholder="Search by invoice # or client name..." isClearable classNamePrefix="react-select" required
           />
         </div>
         <div>
-          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentAmount">Amount (₹)</label>
+          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentAmount">Amount (₹)*</label>
           <input type="number" step="0.01" id="paymentAmount" className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentDate">Date</label>
+          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentDate">Date*</label>
           <input type="date" id="paymentDate" className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentMode">Payment Mode</label>
+          <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="paymentMode">Payment Mode*</label>
           <Select
             id="paymentMode"
             value={paymentMode ? { value: paymentMode, label: paymentMode } : null}

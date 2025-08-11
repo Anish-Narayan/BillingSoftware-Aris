@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import InvoiceTable from '../components/InvoiceTable';
-import AddEditInvoiceModal from '../components/AddEditInvoiceModal'; // Import the new modal
+import AddEditInvoiceModal from '../components/AddEditInvoiceModal'; // The new, powerful modal
 import { db } from '../../firebase';
 import {
   collection,
@@ -100,6 +100,7 @@ const Invoices = () => {
         {renderContent()}
       </div>
 
+      {/* The modal is now much more powerful */}
       <AddEditInvoiceModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}

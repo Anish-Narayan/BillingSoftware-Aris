@@ -3,8 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import InvoiceTable from '../components/InvoiceTable';
 import PaymentTable from '../components/PaymentTable';
-import Modal from '../components/Modal';
-import Select from 'react-select';
+import AddEditInvoiceModal from '../components/AddEditInvoiceModal';
+import AddPaymentModal from '../components/AddPaymentModal';
 import { db } from '../../firebase';
 import {
   doc,
@@ -14,10 +14,7 @@ import {
   where,
   onSnapshot,
   orderBy,
-  addDoc,
   getDocs,
-  writeBatch,
-  serverTimestamp
 } from 'firebase/firestore';
 
 const ClientDetail = () => {
@@ -25,6 +22,7 @@ const ClientDetail = () => {
 
   // Data states
   const [client, setClient] = useState(null);
+  const [allClients, setAllClients] = useState([]);
   const [clientInvoices, setClientInvoices] = useState([]);
   const [clientPayments, setClientPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,13 +32,22 @@ const ClientDetail = () => {
   const [isAddInvoiceModalOpen, setIsAddInvoiceModalOpen] = useState(false);
   const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
 
-  // Form states
-  const [invoiceForm, setInvoiceForm] = useState({ number: '', amount: '', dueDate: '' });
-  const [paymentForm, setPaymentForm] = useState({ invoice: null, amount: '', date: new Date().toISOString().split('T')[0], mode: '', notes: '' });
-  const [formError, setFormError] = useState('');
-  const [saving, setSaving] = useState(false);
-
   // --- Data Fetching ---
+  // Fetch all clients for the Add/Edit Invoice Modal dropdown
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const clientsQuery = query(collection(db, 'clients'), orderBy('name'));
+        const querySnapshot = await getDocs(clientsQuery);
+        setAllClients(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (err) {
+        console.error("Failed to fetch clients list:", err);
+      }
+    };
+    fetchClients();
+  }, []);
+
+  // Fetch details for the specific client
   useEffect(() => {
     setLoading(true);
     // Fetch client details
@@ -61,12 +68,19 @@ const ClientDetail = () => {
     const unsubInvoices = onSnapshot(invoicesQuery, (snapshot) => {
       setClientInvoices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
+    }, (err) => {
+        console.error("Invoice snapshot error:", err);
+        setError("Failed to load invoices.");
+        setLoading(false);
     });
 
     // Listener for this client's payments
     const paymentsQuery = query(collection(db, 'payments'), where('clientId', '==', id), orderBy('date', 'desc'));
     const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
       setClientPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+        console.error("Payment snapshot error:", err);
+        setError("Failed to load payments.");
     });
 
     return () => { // Cleanup listeners
@@ -77,124 +91,15 @@ const ClientDetail = () => {
 
   // --- Calculated Values ---
   const { outstandingBalance } = useMemo(() => {
-    const totalInvoiced = clientInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    const totalInvoiced = clientInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
     const totalPaid = clientInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
     return { outstandingBalance: totalInvoiced - totalPaid };
   }, [clientInvoices]);
 
-  const clientUnpaidInvoicesOptions = useMemo(() =>
-    clientInvoices
-      .filter(inv => inv.status !== 'Paid')
-      .map(inv => ({
-        value: inv.id,
-        label: `${inv.invoiceNumber} (₹${(inv.totalAmount - (inv.paidAmount || 0)).toFixed(2)} due)`,
-        ...inv
-      })), [clientInvoices]);
-
-  // --- Form Handlers ---
-  const resetForms = () => {
-    setInvoiceForm({ number: '', amount: '', dueDate: '' });
-    setPaymentForm({ invoice: null, amount: '', date: new Date().toISOString().split('T')[0], mode: '', notes: '' });
-    setFormError('');
-    setSaving(false);
-  };
-
-  // --- Add Invoice Logic ---
-  const handleSaveInvoice = async (e) => {
-    e.preventDefault();
-    const { number, amount, dueDate } = invoiceForm;
-    if (!number || !amount || !dueDate) {
-      setFormError('Please fill all invoice fields.');
-      return;
-    }
-    setSaving(true);
-    setFormError('');
-    
-    // Check for unique invoice number
-    const q = query(collection(db, 'invoices'), where('invoiceNumber', '==', number.trim()));
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      setFormError('This invoice number is already in use.');
-      setSaving(false);
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, 'invoices'), {
-        invoiceNumber: number.trim(),
-        clientId: client.id,
-        clientName: client.name,
-        totalAmount: parseFloat(amount),
-        issueDate: new Date().toISOString().split('T')[0],
-        dueDate: dueDate,
-        status: 'unpaid',
-        paidAmount: 0,
-        createdAt: serverTimestamp(),
-      });
-      setIsAddInvoiceModalOpen(false);
-      resetForms();
-    } catch (err) {
-      console.error(err);
-      setFormError('Failed to save invoice.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // --- Add Payment Logic ---
-  const handleSavePayment = async (e) => {
-    e.preventDefault();
-    const { invoice, amount, date, mode, notes } = paymentForm;
-    if (!invoice || !amount || !date || !mode) {
-      setFormError('Please fill all required payment fields.');
-      return;
-    }
-    
-    const paymentAmount = parseFloat(amount);
-    const balanceDue = invoice.totalAmount - (invoice.paidAmount || 0);
-
-    if (paymentAmount > balanceDue + 0.01) {
-      setFormError(`Payment exceeds balance due of ₹${balanceDue.toFixed(2)}.`);
-      return;
-    }
-    
-    setSaving(true);
-    setFormError('');
-
-    const batch = writeBatch(db);
-    try {
-      const newTotalPaid = (invoice.paidAmount || 0) + paymentAmount;
-      const newStatus = newTotalPaid >= invoice.totalAmount ? 'Paid' : 'Partially Paid';
-
-      const paymentRef = doc(collection(db, 'payments'));
-      batch.set(paymentRef, {
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        clientId: client.id,
-        clientName: client.name,
-        amount: paymentAmount,
-        date,
-        paymentMode: mode,
-        notes,
-        createdAt: serverTimestamp(),
-      });
-      
-      const invoiceRef = doc(db, 'invoices', invoice.id);
-      batch.update(invoiceRef, {
-        status: newStatus,
-        paidAmount: newTotalPaid,
-      });
-
-      await batch.commit();
-      setIsAddPaymentModalOpen(false);
-      resetForms();
-    } catch (err) {
-      console.error(err);
-      setFormError('Failed to save payment.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const activeInvoices = useMemo(() =>
+    clientInvoices.filter(inv => inv.status !== 'Paid'),
+    [clientInvoices]
+  );
 
   // --- Render Logic ---
   if (loading) {
@@ -203,7 +108,7 @@ const ClientDetail = () => {
   if (error) {
     return <div className="p-10 text-center"><Navbar /><h1 className="text-2xl text-red-600 mt-4">{error}</h1></div>;
   }
-  if (!client) { // Should be covered by error state, but good for safety
+  if (!client) {
     return <div className="p-10 text-center"><Navbar /><h1 className="text-2xl text-red-600 mt-4">Client not found.</h1></div>;
   }
   
@@ -244,63 +149,22 @@ const ClientDetail = () => {
           {clientPayments.length > 0 ? <PaymentTable payments={clientPayments} /> : <p className="text-lg text-gray-600 bg-white p-6 rounded-xl">No payments for this client yet.</p>}
         </div>
 
-        {/* Add Invoice Modal */}
-        <Modal isOpen={isAddInvoiceModalOpen} onClose={() => setIsAddInvoiceModalOpen(false)} title={`New Invoice for ${client.name}`}>
-          <form onSubmit={handleSaveInvoice} className="space-y-4">
-            {formError && <p className="text-red-500 text-center font-semibold">{formError}</p>}
-            <div>
-              <label className="block text-sm font-semibold mb-2" htmlFor="invNumber">Invoice #</label>
-              <input type="text" id="invNumber" value={invoiceForm.number} onChange={(e) => setInvoiceForm({...invoiceForm, number: e.target.value})} className="w-full p-2 border rounded" required />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2" htmlFor="invAmount">Amount (₹)</label>
-                <input type="number" id="invAmount" value={invoiceForm.amount} onChange={(e) => setInvoiceForm({...invoiceForm, amount: e.target.value})} className="w-full p-2 border rounded" required />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold mb-2" htmlFor="invDueDate">Due Date</label>
-                <input type="date" id="invDueDate" value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({...invoiceForm, dueDate: e.target.value})} className="w-full p-2 border rounded" required />
-              </div>
-            </div>
-            <div className="flex justify-end pt-4 space-x-2">
-              <button type="button" onClick={() => setIsAddInvoiceModalOpen(false)} className="bg-gray-200 py-2 px-4 rounded">Cancel</button>
-              <button type="submit" disabled={saving} className="bg-indigo-600 text-white py-2 px-4 rounded disabled:bg-indigo-400">{saving ? 'Saving...' : 'Save Invoice'}</button>
-            </div>
-          </form>
-        </Modal>
+        {/* Add/Edit Invoice Modal */}
+        <AddEditInvoiceModal
+          isOpen={isAddInvoiceModalOpen}
+          onClose={() => setIsAddInvoiceModalOpen(false)}
+          onSuccess={() => setIsAddInvoiceModalOpen(false)}
+          invoiceToEditId={null} // We are only adding, not editing here
+          clients={allClients}
+        />
 
         {/* Add Payment Modal */}
-        <Modal isOpen={isAddPaymentModalOpen} onClose={() => setIsAddPaymentModalOpen(false)} title={`New Payment for ${client.name}`}>
-          <form onSubmit={handleSavePayment} className="space-y-4">
-            {formError && <p className="text-red-500 text-center font-semibold">{formError}</p>}
-            <div>
-              <label className="block text-sm font-semibold mb-2" htmlFor="payInvoice">For Invoice</label>
-              <Select id="payInvoice" options={clientUnpaidInvoicesOptions} onChange={(opt) => setPaymentForm({...paymentForm, invoice: opt, amount: (opt.totalAmount - (opt.paidAmount || 0)).toFixed(2)})} required />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" htmlFor="payAmount">Amount (₹)</label>
-                  <input type="number" id="payAmount" value={paymentForm.amount} onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full p-2 border rounded" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-2" htmlFor="payDate">Date</label>
-                  <input type="date" id="payDate" value={paymentForm.date} onChange={(e) => setPaymentForm({...paymentForm, date: e.target.value})} className="w-full p-2 border rounded" required />
-                </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2" htmlFor="payMode">Payment Mode</label>
-              <Select id="payMode" options={[{value: 'Cash', label: 'Cash'}, {value: 'Bank Transfer', label: 'Bank Transfer'}, {value: 'Credit Card', label: 'Credit Card'}]} onChange={(opt) => setPaymentForm({...paymentForm, mode: opt.value})} required />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2" htmlFor="payNotes">Notes</label>
-              <textarea id="payNotes" value={paymentForm.notes} onChange={(e) => setPaymentForm({...paymentForm, notes: e.target.value})} className="w-full p-2 border rounded h-20" />
-            </div>
-            <div className="flex justify-end pt-4 space-x-2">
-              <button type="button" onClick={() => setIsAddPaymentModalOpen(false)} className="bg-gray-200 py-2 px-4 rounded">Cancel</button>
-              <button type="submit" disabled={saving} className="bg-indigo-600 text-white py-2 px-4 rounded disabled:bg-indigo-400">{saving ? 'Saving...' : 'Save Payment'}</button>
-            </div>
-          </form>
-        </Modal>
+        <AddPaymentModal
+            isOpen={isAddPaymentModalOpen}
+            onClose={() => setIsAddPaymentModalOpen(false)}
+            onSuccess={() => setIsAddPaymentModalOpen(false)}
+            activeInvoices={activeInvoices}
+        />
       </div>
     </div>
   );

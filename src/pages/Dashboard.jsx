@@ -1,4 +1,5 @@
 // src/pages/Dashboard.jsx
+
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import SummaryCard from '../components/SummaryCard';
@@ -10,7 +11,6 @@ import { db } from '../../firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
 const Dashboard = () => {
-  // State for dynamic summary data
   const [totalClients, setTotalClients] = useState(0);
   const [totalInvoiced, setTotalInvoiced] = useState(0);
   const [totalPaid, setTotalPaid] = useState(0);
@@ -18,11 +18,9 @@ const Dashboard = () => {
   const [overdueAmount, setOverdueAmount] = useState(0);
   const [overdueInvoices, setOverdueInvoices] = useState([]);
   
-  // State for data to pass to modals
   const [clients, setClients] = useState([]);
   const [activeInvoices, setActiveInvoices] = useState([]);
 
-  // State for UI control
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -30,9 +28,9 @@ const Dashboard = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const fetchData = async () => {
+    setLoading(true);
     setError(null);
     try {
-      // Fetch clients and invoices in parallel for better performance
       const clientsQuery = query(collection(db, 'clients'), orderBy('name', 'asc'));
       const invoicesQuery = collection(db, 'invoices');
       
@@ -41,14 +39,18 @@ const Dashboard = () => {
           getDocs(invoicesQuery)
       ]);
 
-      // --- Process Clients Data ---
       setTotalClients(clientSnapshot.size);
       setClients(clientSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
 
-      // --- Process Invoices Data ---
       const fetchedInvoices = invoiceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Filter for invoices that can receive payments, for the AddPaymentModal
-      setActiveInvoices(fetchedInvoices.filter(inv => ['unpaid', 'partially paid', 'overdue'].includes(inv.status)));
+      
+      const statusesForPayment = ['unpaid', 'partially paid', 'overdue'];
+      
+      // --- THE FIX: Make the status check case-insensitive ---
+      // This ensures that invoices with statuses like 'Unpaid' or 'unpaid' are both included.
+      setActiveInvoices(
+        fetchedInvoices.filter(inv => inv.status && statusesForPayment.includes(inv.status.toLowerCase()))
+      );
       
       let invoicedSum = 0, paidSum = 0, currentOverdueSum = 0;
       const currentOverdueInvoicesList = [];
@@ -56,21 +58,22 @@ const Dashboard = () => {
       fetchedInvoices.forEach(invoice => {
         const currentTotalAmount = parseFloat(invoice.totalAmount) || 0;
         const currentPaidAmount = parseFloat(invoice.paidAmount) || 0;
+        
         invoicedSum += currentTotalAmount;
         paidSum += currentPaidAmount;
         
         const outstandingForThisInvoice = currentTotalAmount - currentPaidAmount;
-        if (invoice.status === 'overdue' && outstandingForThisInvoice > 0) {
+
+        // Make this check case-insensitive as well for robustness
+        if (invoice.status && invoice.status.toLowerCase() === 'overdue' && outstandingForThisInvoice > 0) {
           currentOverdueInvoicesList.push(invoice);
           currentOverdueSum += outstandingForThisInvoice;
         }
       });
 
-      // Set state for summary cards
       setTotalInvoiced(invoicedSum);
       setTotalPaid(paidSum);
       setOverdueAmount(currentOverdueSum);
-      // Outstanding is total unpaid minus the overdue portion
       setOutstandingAmount(invoicedSum - paidSum - currentOverdueSum);
       setOverdueInvoices(currentOverdueInvoicesList);
 
@@ -82,17 +85,15 @@ const Dashboard = () => {
     }
   };
 
-  // Fetch data on initial component mount
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Generic success handler for all modals to close them and refresh data
   const handleSuccess = () => {
     setIsClientModalOpen(false);
     setIsInvoiceModalOpen(false);
     setIsPaymentModalOpen(false);
-    fetchData(); // Re-fetch all data to update the dashboard
+    fetchData();
   };
 
   if (loading) {
@@ -161,7 +162,7 @@ const Dashboard = () => {
                 return (
                   <li key={invoice.id} className="text-lg text-gray-700 p-3 bg-red-50 rounded-md flex justify-between items-center flex-wrap">
                     <div>
-                      Invoice <Link to={`/invoices/${invoice.id}`} className="font-semibold text-indigo-600 hover:underline">{invoice.invoiceNumber}</Link> for <span className="font-semibold">{invoice.clientName}</span> - <span className="font-bold text-red-700">₹{outstandingAmountForInvoice.toFixed(2)}</span>
+                      Invoice <Link to={`/invoices/${invoice.id}`} className="font-semibold text-indigo-600 hover:underline">{invoice.invoiceNumber || 'N/A'}</Link> for <span className="font-semibold">{invoice.clientName}</span> - <span className="font-bold text-red-700">₹{outstandingAmountForInvoice.toFixed(2)}</span>
                     </div>
                     <span className="text-sm text-gray-600 mt-1 sm:mt-0">Due: {invoice.dueDate}</span>
                   </li>
@@ -174,7 +175,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Render All Reusable Modals */}
       <AddClientModal 
         isOpen={isClientModalOpen} 
         onClose={() => setIsClientModalOpen(false)}
@@ -210,4 +210,4 @@ const QuickActionCard = ({ title, description, icon, bgColor, iconBgColor, iconC
   </div>
 );
 
-export default Dashboard;
+export default Dashboard; 
