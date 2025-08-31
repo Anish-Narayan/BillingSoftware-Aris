@@ -76,13 +76,9 @@ const InvoiceDetail = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
 
-    const logoUrl = '/512x512-01.png';
+    const logoUrl = '/640x640-01.jpg';
 
-    doc.addImage(logoUrl, 'PNG', 14, 15, 10, 10);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(40);
-    doc.text('ArisInnovations.', 26, 22);
+    doc.addImage(logoUrl, 'JPG', 14, 3, 40, 40);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
